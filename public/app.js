@@ -572,6 +572,7 @@ function bindFormEvents() {
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const payload = {
+      id: state.editingId,
       date: document.getElementById("field-date").value,
       time: document.getElementById("field-time").value,
       event: document.getElementById("field-event").value,
