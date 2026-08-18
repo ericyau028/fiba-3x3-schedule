@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FIBA 3x3 直播工作時間表</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">3x3</span>
+      <div class="brand-text">
+        <h1>FIBA 3x3 直播工作時間表</h1>
+        <p>錄影 / 直播操作時間表</p>
+      </div>
+    </div>
+    <div class="top-status">
+      <div class="clock" id="clock">--:--:--</div>
+      <div class="next-action" id="next-action">正在讀取...</div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel schedule-panel">
+      <div class="panel-head">
+        <h2>時間表</h2>
+        <span class="mode-chip" id="mode-chip" hidden></span>
+        <div class="legend">
+          <span class="legend-item legend-past">過去</span>
+          <span class="legend-item legend-soon">30 分鐘內</span>
+          <span class="legend-item legend-active">進行中</span>
+        </div>
+      </div>
+      <div class="schedule-wrap" id="schedule-wrap">
+        <div class="rail" id="rail" aria-hidden="true"></div>
+        <div class="schedule-body" id="schedule-body"></div>
+      </div>
+    </section>
+
+    <aside class="panel form-panel">
+      <div class="panel-head">
+        <h2>新增時間段</h2>
+      </div>
+      <form id="entry-form" autocomplete="off">
+        <div class="form-grid">
+          <div class="field">
+            <label for="field-date">日期</label>
+            <input id="field-date" name="date" type="date" value="2026-08-22" required>
+          </div>
+          <div class="field">
+            <label for="field-time">開始時間</label>
+            <input id="field-time" name="time" type="time" required>
+          </div>
+          <div class="field">
+            <label for="field-event">賽事</label>
+            <select id="field-event" name="event">
+              <option>Challenger</option>
+              <option>WT</option>
+              <option>WS</option>
+              <option>CUP</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="field-region">地區</label>
+            <input id="field-region" name="region" list="region-suggestions" placeholder="例如 Beijing" required>
+            <datalist id="region-suggestions"></datalist>
+          </div>
+          <div class="field">
+            <label for="field-operation">操作</label>
+            <select id="field-operation" name="operation">
+              <option>開始錄影</option>
+              <option>直播</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="field-tool">使用工具</label>
+            <select id="field-tool" name="tool">
+              <option>obs-1</option>
+              <option>obs-2</option>
+              <option>vMix</option>
+            </select>
+          </div>
+          <div class="field field-wide">
+            <label for="field-description">描述</label>
+            <input id="field-description" name="description" placeholder="例如 Session 1">
+          </div>
+          <div class="field field-wide">
+            <label for="field-end">結束時間</label>
+            <div class="end-row">
+              <input id="field-end" name="end_time" type="time" required>
+              <span class="duration-badge" id="duration-label">--</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="preview" id="form-preview">
+          <div class="preview-title">會自動新增</div>
+          <div class="preview-line"><span class="preview-time" id="preview-start-time">--:--</span><span id="preview-start-op">開始錄影</span></div>
+          <div class="preview-line"><span class="preview-time" id="preview-end-time">--:--</span><span id="preview-end-op">停止錄影</span></div>
+        </div>
+
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">完成</button>
+          <button class="btn btn-ghost" type="button" id="reset-form">重設</button>
+        </div>
+      </form>
+    </aside>
+  </main>
+
+  <div class="toast" id="toast" role="status"></div>
+  <script src="app.js"></script>
+</body>
+</html>
