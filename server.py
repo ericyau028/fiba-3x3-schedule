@@ -369,19 +369,28 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({"error": "item not found"}, 404)
             return
 
-        start_like = bool(item.get("relation") or item.get("end_time"))
-        if start_like and not vals["end_time"]:
+        pair_start = bool(item.get("end_time"))
+        if pair_start and not vals["end_time"]:
             self._send_json({"error": "結束時間格式必須是 HH:MM"}, 400)
             return
 
-        target = None
-        if item.get("relation"):
-            target = next(
-                (x for x in items if x["letter"] == item["relation"]),
-                None,
-            )
+        new_relation = str(payload.get("relation") or "").strip() or None
+        if new_relation == item["letter"]:
+            self._send_json({"error": "關聯不能指向自己"}, 400)
+            return
+        if new_relation and not any(
+            x["letter"] == new_relation and x["id"] != item["id"] for x in items
+        ):
+            self._send_json({"error": "找不到關聯的字母"}, 400)
+            return
 
-        end_time = vals["end_time"] if start_like else item.get("end_time")
+        relation_changed = new_relation != item.get("relation")
+        target = next(
+            (x for x in items if x["letter"] == new_relation),
+            None,
+        ) if new_relation else None
+
+        end_time = vals["end_time"] if pair_start else item.get("end_time")
         end_date = None
         if end_time:
             end_date = (vals["start_date"] + dt.timedelta(days=1)).isoformat() \
@@ -399,19 +408,20 @@ class Handler(BaseHTTPRequestHandler):
             "end_datetime": local_dt(end_date, end_time).isoformat()
                 if end_time and end_date else None,
             "tool": vals["tool"],
+            "relation": new_relation,
         })
 
-        if start_like:
+        if pair_start:
             if vals["operation"] == "直播":
                 item["operation"] = "Live"
-                if target:
+                if target and not relation_changed:
                     target["operation"] = "End Live"
             elif vals["operation"] == "開始錄影":
                 item["operation"] = "開始錄影"
-                if target:
+                if target and not relation_changed:
                     target["operation"] = "停止錄影"
 
-        if target and end_time:
+        if target and end_time and not relation_changed:
             target.update({
                 "date": end_date,
                 "time": end_time,

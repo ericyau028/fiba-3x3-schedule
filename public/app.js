@@ -119,12 +119,14 @@ function updateLocalItem(items, payload) {
   const item = items.find((i) => i.id === payload.id);
   if (!item) return [];
   const iso = (d, t) => `${d}T${t}:00+08:00`;
-  const startLike = !!(item.relation || item.end_time);
-  const target = item.relation
-    ? items.find((x) => x.letter === item.relation) || null
+  const pairStart = !!item.end_time;
+  const newRelation = payload.relation || null;
+  const relationChanged = newRelation !== (item.relation || null);
+  const target = newRelation
+    ? items.find((x) => x.letter === newRelation) || null
     : null;
 
-  let endTime = startLike ? payload.end_time : null;
+  let endTime = pairStart ? payload.end_time : null;
   let endDate = null;
   if (endTime) {
     endDate = payload.date;
@@ -144,19 +146,20 @@ function updateLocalItem(items, payload) {
   item.region = payload.region;
   item.description = payload.description;
   item.tool = payload.tool;
+  item.relation = newRelation;
   item.end_time = endTime;
   item.end_date = endDate;
   item.end_datetime = endTime && endDate ? iso(endDate, endTime) : null;
 
-  if (startLike && payload.operation === "直播" && item.operation !== "Live") {
+  if (pairStart && payload.operation === "直播" && item.operation !== "Live") {
     item.operation = "Live";
-    if (target) target.operation = "End Live";
-  } else if (startLike && payload.operation === "開始錄影" && item.operation !== "開始錄影") {
+    if (target && !relationChanged) target.operation = "End Live";
+  } else if (pairStart && payload.operation === "開始錄影" && item.operation !== "開始錄影") {
     item.operation = "開始錄影";
-    if (target) target.operation = "停止錄影";
+    if (target && !relationChanged) target.operation = "停止錄影";
   }
 
-  if (target && endTime) {
+  if (target && endTime && !relationChanged) {
     target.date = endDate;
     target.time = endTime;
     target.datetime = iso(endDate, endTime);
@@ -499,10 +502,11 @@ function refreshRegionSuggestions() {
 
 function setFormMode(mode, item) {
   state.editingId = mode === "edit" && item ? item.id : null;
-  const startLike = !!(item && (item.relation || item.end_time));
+  const startLike = !!(item && item.end_time);
   document.getElementById("form-title").textContent = mode === "edit" ? "編輯時間段" : "新增時間段";
   document.getElementById("submit-btn").textContent = mode === "edit" ? "更新" : "完成";
   document.getElementById("field-end").disabled = mode === "edit" && !startLike;
+  document.getElementById("relation-field").hidden = mode !== "edit";
 }
 
 function resetForm() {
@@ -526,6 +530,7 @@ function startEdit(item) {
   document.getElementById("field-tool").value = item.tool && ["obs-1", "obs-2", "vMix"].includes(item.tool)
     ? item.tool
     : "obs-1";
+  document.getElementById("field-relation").value = item.relation || "";
   const isLive = item.operation === "Live" || item.operation === "End Live";
   document.getElementById("field-operation").value = isLive ? "直播" : "開始錄影";
   setFormMode("edit", item);
@@ -579,6 +584,7 @@ function bindFormEvents() {
       description: document.getElementById("field-description").value.trim(),
       end_time: document.getElementById("field-end").value,
       tool: document.getElementById("field-tool").value,
+      relation: document.getElementById("field-relation").value.trim(),
     };
     if (!payload.time || !payload.region) {
       toast("請填寫所有欄位", true);
@@ -588,7 +594,18 @@ function bindFormEvents() {
     const editingItem = editing
       ? state.items.find((i) => i.id === state.editingId)
       : null;
-    const startLike = !!(editingItem && (editingItem.relation || editingItem.end_time));
+    if (editing) {
+      const rel = payload.relation;
+      if (rel && rel === editingItem.letter) {
+        toast("關聯不能指向自己", true);
+        return;
+      }
+      if (rel && !state.items.some((i) => i.id !== editingItem.id && i.letter === rel)) {
+        toast("找不到關聯的字母", true);
+        return;
+      }
+    }
+    const startLike = !!(editingItem && editingItem.end_time);
     if (!editing || startLike) {
       if (!payload.end_time) {
         toast("請填寫所有欄位", true);
