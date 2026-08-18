@@ -115,12 +115,12 @@ select {
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-columns: minmax(0, 1fr) 320px;
   gap: 16px;
   align-items: start;
   max-width: 1500px;
   margin: 0 auto;
-  padding: 16px;
+  padding: 12px;
 }
 
 .panel {
@@ -225,7 +225,7 @@ select {
   position: relative;
   z-index: 2;
   margin-left: var(--rail-w);
-  min-width: 950px;
+  min-width: 746px;
 }
 
 .date-head {
@@ -266,8 +266,8 @@ select {
 .grid-head,
 .row {
   display: grid;
-  grid-template-columns: 100px 96px 96px 128px minmax(170px, 1fr) 96px 76px 88px 64px;
-  gap: 8px;
+  grid-template-columns: 76px 70px 76px 110px minmax(100px, 1fr) 72px 54px 68px 80px;
+  gap: 5px;
   align-items: center;
 }
 
@@ -288,7 +288,7 @@ select {
 
 .row {
   min-height: 54px;
-  padding: 9px 12px;
+  padding: 8px 10px;
   border-bottom: 1px solid #e8ecf1;
   background: var(--surface);
   transition: background 0.2s ease;
@@ -466,6 +466,7 @@ select {
   font-size: 12px;
   font-weight: 700;
   color: #43586e;
+  cursor: pointer;
 }
 
 .rel-arrow {
@@ -503,7 +504,7 @@ select {
 .row-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 
 .edit-btn,
@@ -520,6 +521,13 @@ select {
   cursor: pointer;
   font-size: 15px;
   line-height: 1;
+}
+
+.edit-btn {
+  width: auto;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .edit-btn:hover {

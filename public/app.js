@@ -280,7 +280,7 @@ function buildRow(item) {
     ? makeEl("span", `tool-badge ${toolClass(item.tool)}`, item.tool)
     : makeEl("span", "tool-badge", "—");
 
-  const edit = makeEl("button", "edit-btn", "✎");
+  const edit = makeEl("button", "edit-btn", "編輯");
   edit.type = "button";
   edit.title = "編輯";
 
@@ -302,7 +302,7 @@ function render() {
 
   const sorted = [...state.items].sort((a, b) => a.datetime.localeCompare(b.datetime));
   const relationCount = sorted.filter((i) => i.relation).length;
-  const railW = relationCount ? Math.min(200, 10 + relationCount * 18) : 0;
+  const railW = relationCount ? Math.min(180, 12 + relationCount * 14) : 0;
   document.documentElement.style.setProperty("--rail-w", `${railW}px`);
   if (rail) {
     rail.style.display = relationCount ? "" : "none";
@@ -381,9 +381,9 @@ function drawRail() {
   if (!relations.length) return;
 
   const svgNS = "http://www.w3.org/2000/svg";
-  const laneW = 18;
-  const padX = 8;
-  const railW = Math.min(200, 10 + relations.length * laneW);
+  const laneW = 14;
+  const padX = 6;
+  const railW = Math.min(180, 12 + relations.length * laneW);
   document.documentElement.style.setProperty("--rail-w", `${railW}px`);
   rail.style.width = `${railW}px`;
 
@@ -434,15 +434,6 @@ function drawRail() {
     const midY = (y1 + y2) / 2;
     const label = document.createElementNS(svgNS, "g");
     label.setAttribute("transform", `translate(${x}, ${midY})`);
-    const rect = document.createElementNS(svgNS, "rect");
-    rect.setAttribute("x", -13);
-    rect.setAttribute("y", -10);
-    rect.setAttribute("width", 26);
-    rect.setAttribute("height", 20);
-    rect.setAttribute("rx", 6);
-    rect.setAttribute("fill", "#fff");
-    rect.setAttribute("stroke", color);
-    rect.setAttribute("stroke-width", 1.2);
     const text = document.createElementNS(svgNS, "text");
     text.setAttribute("x", 0);
     text.setAttribute("y", 4);
@@ -450,8 +441,11 @@ function drawRail() {
     text.setAttribute("font-size", 11);
     text.setAttribute("font-weight", 700);
     text.setAttribute("fill", color);
+    text.setAttribute("stroke", "#fff");
+    text.setAttribute("stroke-width", 3);
+    text.setAttribute("paint-order", "stroke");
     text.textContent = item.relation;
-    label.append(rect, text);
+    label.appendChild(text);
     svg.appendChild(label);
   });
 }
@@ -503,10 +497,12 @@ function refreshRegionSuggestions() {
 function setFormMode(mode, item) {
   state.editingId = mode === "edit" && item ? item.id : null;
   const startLike = !!(item && item.end_time);
+  const relationInput = document.getElementById("field-relation");
   document.getElementById("form-title").textContent = mode === "edit" ? "編輯時間段" : "新增時間段";
   document.getElementById("submit-btn").textContent = mode === "edit" ? "更新" : "完成";
   document.getElementById("field-end").disabled = mode === "edit" && !startLike;
-  document.getElementById("relation-field").hidden = mode !== "edit";
+  relationInput.disabled = mode !== "edit";
+  relationInput.placeholder = mode === "edit" ? "例如 c" : "完成時自動產生";
 }
 
 function resetForm() {
@@ -677,6 +673,13 @@ function bindFormEvents() {
   document.getElementById("reset-form").addEventListener("click", resetForm);
 
   document.getElementById("schedule-body").addEventListener("click", async (e) => {
+    const relCell = e.target.closest(".rel-link");
+    if (relCell) {
+      const row = relCell.closest(".row");
+      const item = state.items.find((i) => i.id === row.dataset.id);
+      if (item) startEdit(item);
+      return;
+    }
     const editBtn = e.target.closest(".edit-btn");
     if (editBtn) {
       const row = editBtn.closest(".row");
@@ -710,8 +713,7 @@ function bindFormEvents() {
 
 function init() {
   bindFormEvents();
-  updateDuration();
-  updatePreview();
+  resetForm();
   loadSchedule().catch((err) => {
     toast(err.message, true);
     document.getElementById("next-action").textContent = "連線失敗";
