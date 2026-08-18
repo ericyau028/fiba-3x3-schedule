@@ -7,6 +7,7 @@ const state = {
   items: [],
   offsetMs: 0,
   storageMode: "remote",
+  editingId: null,
 };
 
 function serverNow() {
@@ -114,6 +115,60 @@ function addLocalPair(items, payload) {
   return [start, end];
 }
 
+function updateLocalItem(items, payload) {
+  const item = items.find((i) => i.id === payload.id);
+  if (!item) return [];
+  const iso = (d, t) => `${d}T${t}:00+08:00`;
+  const startLike = !!(item.relation || item.end_time);
+  const target = item.relation
+    ? items.find((x) => x.letter === item.relation) || null
+    : null;
+
+  let endTime = startLike ? payload.end_time : null;
+  let endDate = null;
+  if (endTime) {
+    endDate = payload.date;
+    const [sh, sm] = payload.time.split(":").map(Number);
+    const [eh, em] = payload.end_time.split(":").map(Number);
+    if (eh * 60 + em <= sh * 60 + sm) {
+      const d = new Date(`${payload.date}T00:00:00Z`);
+      d.setUTCDate(d.getUTCDate() + 1);
+      endDate = d.toISOString().slice(0, 10);
+    }
+  }
+
+  item.date = payload.date;
+  item.time = payload.time;
+  item.datetime = iso(payload.date, payload.time);
+  item.event = payload.event;
+  item.region = payload.region;
+  item.description = payload.description;
+  item.tool = payload.tool;
+  item.end_time = endTime;
+  item.end_date = endDate;
+  item.end_datetime = endTime && endDate ? iso(endDate, endTime) : null;
+
+  if (startLike && payload.operation === "直播" && item.operation !== "Live") {
+    item.operation = "Live";
+    if (target) target.operation = "End Live";
+  } else if (startLike && payload.operation === "開始錄影" && item.operation !== "開始錄影") {
+    item.operation = "開始錄影";
+    if (target) target.operation = "停止錄影";
+  }
+
+  if (target && endTime) {
+    target.date = endDate;
+    target.time = endTime;
+    target.datetime = iso(endDate, endTime);
+    target.event = payload.event;
+    target.region = payload.region;
+    target.description = payload.description;
+    target.tool = payload.tool;
+  }
+
+  return [item, target].filter(Boolean);
+}
+
 function updateModeChip() {
   const chip = document.getElementById("mode-chip");
   if (!chip) return;
@@ -134,8 +189,9 @@ function fmtClock(d) {
 }
 
 function dateLabel(dateStr) {
-  const d = parseLocal(`${dateStr}T00:00:00+08:00`);
-  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()} 週${WEEKDAYS[d.getUTCDay()]}`;
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const week = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return `${d} ${MONTHS[m - 1]} ${y} 週${WEEKDAYS[week]}`;
 }
 
 function hkDateString(now) {
@@ -221,11 +277,18 @@ function buildRow(item) {
     ? makeEl("span", `tool-badge ${toolClass(item.tool)}`, item.tool)
     : makeEl("span", "tool-badge", "—");
 
+  const edit = makeEl("button", "edit-btn", "✎");
+  edit.type = "button";
+  edit.title = "編輯";
+
   const del = makeEl("button", "delete-btn", "✕");
   del.type = "button";
   del.title = "刪除";
 
-  row.append(timeCell, eventBadge, regionCell, opBadge, desc, endCell, relCell, toolBadge, del);
+  const actions = makeEl("div", "row-actions");
+  actions.append(edit, del);
+
+  row.append(timeCell, eventBadge, regionCell, opBadge, desc, endCell, relCell, toolBadge, actions);
   return row;
 }
 
@@ -434,14 +497,41 @@ function refreshRegionSuggestions() {
   });
 }
 
+function setFormMode(mode, item) {
+  state.editingId = mode === "edit" && item ? item.id : null;
+  const startLike = !!(item && (item.relation || item.end_time));
+  document.getElementById("form-title").textContent = mode === "edit" ? "編輯時間段" : "新增時間段";
+  document.getElementById("submit-btn").textContent = mode === "edit" ? "更新" : "完成";
+  document.getElementById("field-end").disabled = mode === "edit" && !startLike;
+}
+
 function resetForm() {
   document.getElementById("entry-form").reset();
   document.getElementById("field-date").value = "2026-08-22";
   document.getElementById("field-event").value = "Challenger";
   document.getElementById("field-operation").value = "開始錄影";
   document.getElementById("field-tool").value = "obs-1";
+  setFormMode("add");
   updateDuration();
   updatePreview();
+}
+
+function startEdit(item) {
+  document.getElementById("field-date").value = item.date;
+  document.getElementById("field-time").value = item.time;
+  document.getElementById("field-event").value = item.event || "Challenger";
+  document.getElementById("field-region").value = item.region || "";
+  document.getElementById("field-description").value = item.description || "";
+  document.getElementById("field-end").value = item.end_time || "";
+  document.getElementById("field-tool").value = item.tool && ["obs-1", "obs-2", "vMix"].includes(item.tool)
+    ? item.tool
+    : "obs-1";
+  const isLive = item.operation === "Live" || item.operation === "End Live";
+  document.getElementById("field-operation").value = isLive ? "直播" : "開始錄影";
+  setFormMode("edit", item);
+  updateDuration();
+  updatePreview();
+  document.querySelector(".form-panel").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 let toastTimer;
@@ -490,16 +580,47 @@ function bindFormEvents() {
       end_time: document.getElementById("field-end").value,
       tool: document.getElementById("field-tool").value,
     };
-    if (!payload.time || !payload.end_time || !payload.region) {
+    if (!payload.time || !payload.region) {
       toast("請填寫所有欄位", true);
       return;
     }
-    if (payload.time === payload.end_time) {
-      toast("結束時間不能與開始時間相同", true);
-      return;
+    const editing = Boolean(state.editingId);
+    const editingItem = editing
+      ? state.items.find((i) => i.id === state.editingId)
+      : null;
+    const startLike = !!(editingItem && (editingItem.relation || editingItem.end_time));
+    if (!editing || startLike) {
+      if (!payload.end_time) {
+        toast("請填寫所有欄位", true);
+        return;
+      }
+      if (payload.time === payload.end_time) {
+        toast("結束時間不能與開始時間相同", true);
+        return;
+      }
     }
     try {
-      if (state.storageMode === "local") {
+      if (editing) {
+        if (state.storageMode === "local") {
+          updateLocalItem(state.items, payload);
+          state.items.sort((a, b) => a.datetime.localeCompare(b.datetime));
+          saveLocalItems(state.items);
+          await loadSchedule();
+          resetForm();
+          toast("已更新（已儲存到此瀏覽器）");
+        } else {
+          const res = await fetch(`api/schedule?id=${encodeURIComponent(state.editingId)}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "更新失敗");
+          await loadSchedule();
+          resetForm();
+          toast("已更新");
+        }
+      } else if (state.storageMode === "local") {
         const pair = addLocalPair(state.items, payload);
         state.items = [...state.items, ...pair].sort((a, b) =>
           a.datetime.localeCompare(b.datetime),
@@ -539,6 +660,13 @@ function bindFormEvents() {
   document.getElementById("reset-form").addEventListener("click", resetForm);
 
   document.getElementById("schedule-body").addEventListener("click", async (e) => {
+    const editBtn = e.target.closest(".edit-btn");
+    if (editBtn) {
+      const row = editBtn.closest(".row");
+      const item = state.items.find((i) => i.id === row.dataset.id);
+      if (item) startEdit(item);
+      return;
+    }
     const btn = e.target.closest(".delete-btn");
     if (!btn) return;
     const row = btn.closest(".row");

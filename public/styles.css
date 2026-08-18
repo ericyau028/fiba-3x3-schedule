@@ -266,7 +266,7 @@ select {
 .grid-head,
 .row {
   display: grid;
-  grid-template-columns: 100px 96px 96px 128px minmax(170px, 1fr) 96px 76px 88px 36px;
+  grid-template-columns: 100px 96px 96px 128px minmax(170px, 1fr) 96px 76px 88px 64px;
   gap: 8px;
   align-items: center;
 }
@@ -500,6 +500,13 @@ select {
   color: #d97706;
 }
 
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.edit-btn,
 .delete-btn {
   display: grid;
   place-items: center;
@@ -513,6 +520,12 @@ select {
   cursor: pointer;
   font-size: 15px;
   line-height: 1;
+}
+
+.edit-btn:hover {
+  border-color: #b9cdf0;
+  background: #eef4ff;
+  color: #1d5fd6;
 }
 
 .delete-btn:hover {

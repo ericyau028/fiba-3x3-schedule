@@ -169,6 +169,50 @@ def next_letter(used):
         i += 1
 
 
+def validate_payload(payload, require_operation=True):
+    date_str = str(payload.get("date") or "").strip()
+    time_str = str(payload.get("time") or "").strip()
+    end_time = str(payload.get("end_time") or "").strip()
+    event = str(payload.get("event") or "").strip()
+    region = str(payload.get("region") or "").strip()
+    operation = str(payload.get("operation") or "").strip()
+    description = str(payload.get("description") or "").strip()
+    tool = normalize_tool(payload.get("tool"))
+
+    if not DATE_RE.match(date_str):
+        return "日期格式必須是 YYYY-MM-DD", None
+    if not TIME_RE.match(time_str):
+        return "開始時間格式必須是 HH:MM", None
+    if end_time and not TIME_RE.match(end_time):
+        return "結束時間格式必須是 HH:MM", None
+    if end_time and end_time == time_str:
+        return "結束時間不能與開始時間相同", None
+    if event not in EVENTS:
+        return "賽事必須是 Challenger / WT / WS / CUP", None
+    if require_operation and operation not in OPERATIONS:
+        return "操作必須是 開始錄影 / 直播", None
+    if not region:
+        return "請輸入地區", None
+    if tool not in TOOLS:
+        return "使用工具必須是 obs-1 / obs-2 / vMix", None
+    try:
+        start_date = dt.date.fromisoformat(date_str)
+    except ValueError:
+        return "日期格式不正確", None
+
+    return None, {
+        "date": date_str,
+        "time": time_str,
+        "end_time": end_time or None,
+        "event": event,
+        "region": region,
+        "operation": operation,
+        "description": description,
+        "tool": tool,
+        "start_date": start_date,
+    }
+
+
 def save_items(items):
     DATA.mkdir(parents=True, exist_ok=True)
     tmp = DATA_FILE.with_suffix(".tmp")
@@ -258,45 +302,23 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({"error": "invalid JSON body"}, 400)
             return
 
-        date_str = str(payload.get("date") or "").strip()
-        time_str = str(payload.get("time") or "").strip()
-        end_time = str(payload.get("end_time") or "").strip()
-        event = str(payload.get("event") or "").strip()
-        region = str(payload.get("region") or "").strip()
-        operation = str(payload.get("operation") or "").strip()
-        description = str(payload.get("description") or "").strip()
-        tool = normalize_tool(payload.get("tool"))
-
-        if not DATE_RE.match(date_str):
-            self._send_json({"error": "日期格式必須是 YYYY-MM-DD"}, 400)
+        err, vals = validate_payload(payload, require_operation=True)
+        if err:
+            self._send_json({"error": err}, 400)
             return
-        if not TIME_RE.match(time_str):
-            self._send_json({"error": "開始時間格式必須是 HH:MM"}, 400)
-            return
-        if not TIME_RE.match(end_time):
+        if not vals["end_time"]:
             self._send_json({"error": "結束時間格式必須是 HH:MM"}, 400)
             return
-        if end_time == time_str:
-            self._send_json({"error": "結束時間不能與開始時間相同"}, 400)
-            return
-        if event not in EVENTS:
-            self._send_json({"error": "賽事必須是 Challenger / WT / WS / CUP"}, 400)
-            return
-        if operation not in OPERATIONS:
-            self._send_json({"error": "操作必須是 開始錄影 / 直播"}, 400)
-            return
-        if not region:
-            self._send_json({"error": "請輸入地區"}, 400)
-            return
-        if tool not in TOOLS:
-            self._send_json({"error": "使用工具必須是 obs-1 / obs-2 / vMix"}, 400)
-            return
 
-        try:
-            start_date = dt.date.fromisoformat(date_str)
-        except ValueError:
-            self._send_json({"error": "日期格式不正確"}, 400)
-            return
+        date_str = vals["date"]
+        time_str = vals["time"]
+        end_time = vals["end_time"]
+        event = vals["event"]
+        region = vals["region"]
+        operation = vals["operation"]
+        description = vals["description"]
+        tool = vals["tool"]
+        start_date = vals["start_date"]
 
         end_date = start_date + dt.timedelta(days=1) if end_time <= time_str else start_date
         start_op, end_op = ("開始錄影", "停止錄影") if operation == "開始錄影" else ("Live", "End Live")
@@ -319,6 +341,90 @@ class Handler(BaseHTTPRequestHandler):
         items.sort(key=lambda i: i["datetime"])
         save_items(items)
         self._send_json({"items": [start_item, end_item]}, 201)
+
+    def do_PUT(self):
+        parsed = urlparse(self.path)
+        if parsed.path != "/api/schedule":
+            self._send_json({"error": "not found"}, 404)
+            return
+        query = parse_qs(parsed.query)
+        item_id = (query.get("id") or [None])[0]
+        if not item_id:
+            self._send_json({"error": "missing id"}, 400)
+            return
+
+        payload = self._read_json()
+        if not isinstance(payload, dict):
+            self._send_json({"error": "invalid JSON body"}, 400)
+            return
+
+        err, vals = validate_payload(payload, require_operation=False)
+        if err:
+            self._send_json({"error": err}, 400)
+            return
+
+        items = load_items()
+        item = next((x for x in items if x["id"] == item_id), None)
+        if not item:
+            self._send_json({"error": "item not found"}, 404)
+            return
+
+        start_like = bool(item.get("relation") or item.get("end_time"))
+        if start_like and not vals["end_time"]:
+            self._send_json({"error": "結束時間格式必須是 HH:MM"}, 400)
+            return
+
+        target = None
+        if item.get("relation"):
+            target = next(
+                (x for x in items if x["letter"] == item["relation"]),
+                None,
+            )
+
+        end_time = vals["end_time"] if start_like else item.get("end_time")
+        end_date = None
+        if end_time:
+            end_date = (vals["start_date"] + dt.timedelta(days=1)).isoformat() \
+                if end_time <= vals["time"] else vals["start_date"].isoformat()
+
+        item.update({
+            "date": vals["date"],
+            "time": vals["time"],
+            "datetime": local_dt(vals["date"], vals["time"]).isoformat(),
+            "event": vals["event"],
+            "region": vals["region"],
+            "description": vals["description"],
+            "end_time": end_time,
+            "end_date": end_date,
+            "end_datetime": local_dt(end_date, end_time).isoformat()
+                if end_time and end_date else None,
+            "tool": vals["tool"],
+        })
+
+        if start_like:
+            if vals["operation"] == "直播":
+                item["operation"] = "Live"
+                if target:
+                    target["operation"] = "End Live"
+            elif vals["operation"] == "開始錄影":
+                item["operation"] = "開始錄影"
+                if target:
+                    target["operation"] = "停止錄影"
+
+        if target and end_time:
+            target.update({
+                "date": end_date,
+                "time": end_time,
+                "datetime": local_dt(end_date, end_time).isoformat(),
+                "event": vals["event"],
+                "region": vals["region"],
+                "description": vals["description"],
+                "tool": vals["tool"],
+            })
+
+        items.sort(key=lambda i: i["datetime"])
+        save_items(items)
+        self._send_json({"items": [item] + ([target] if target else [])})
 
     def do_DELETE(self):
         parsed = urlparse(self.path)

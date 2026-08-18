@@ -28,6 +28,7 @@ python server.py
 
 - `GET /api/schedule`：讀取全部時間段
 - `POST /api/schedule`：新增一組開始 / 結束時間段
+- `PUT /api/schedule?id=...`：更新單一時間段（開始列會同步更新對應的停止列）
 - `DELETE /api/schedule?id=...`：刪除單一時間段
 
 ## GitHub Pages 網頁版
